@@ -6,17 +6,36 @@
 # between Leap Motion and you, your company or other organization.             #
 ################################################################################
 
-import sys, _thread, time, os, inspect
+# TODO convert into polling architecture from listener architecture (or I can pseudo-poll)
 
-src_dir = os.path.dirname(inspect.getfile(inspect.currentframe()))
-arch_dir = 'lib/x64'
-sys.path.insert(0, os.path.abspath(os.path.join(src_dir, arch_dir)))
+import sys, os, inspect
 
+from pandas.io.sql import DatabaseError
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(inspect.getfile(inspect.currentframe())), 'lib/x64')))
+
+from config import * # ADDRESS, CHARACTERISTIC_UUID(#)
+
+import _thread, time
 import Leap
 
-class SampleListener(Leap.Listener):
-    finger_names = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky']
-    bone_names = ['Metacarpal', 'Proximal', 'Intermediate', 'Distal']
+import numpy as np
+import pandas as pd
+import ahrs
+from ahrs.common import orientation
+from ahrs import Quaternion
+
+
+fingers = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky']
+bones = ['Metacarpal', 'Proximal', 'Intermediate', 'Distal']
+cols = [f+'_'+b for f in fingers for b in bones]
+
+class Listener(Leap.Listener):
+
+    def __init__(self):
+        self.df = None
+        self.c = 0
+        self.data = np.zeros(shape=(10000, 20))
+        self.row = np.zeros(shape=(20))
 
     def on_init(self, controller):
         print("Initialized")
@@ -29,28 +48,29 @@ class SampleListener(Leap.Listener):
         print("Disconnected")
 
     def on_exit(self, controller):
+        self.df = pd.DataFrame(self.data, columns=cols)
+        print(self.df.head())
+        print(self.df.tail())
+        input('Enter again(?) to exit')
+
         print("Exited")
 
     def on_frame(self, controller):
-        # Get the most recent frame and report some basic information
+        # fetch frame; report info
         frame = controller.frame()
-
-        print("Frame id: %d, timestamp: %d, hands: %d, fingers: %d" % (
-              frame.id, frame.timestamp, len(frame.hands), len(frame.fingers)))
+        # print("Frame id: %d, timestamp: %d, hands: %d, fingers: %d" % (frame.id, frame.timestamp, len(frame.hands), len(frame.fingers)))
 
         # Get hands
         for hand in frame.hands:
 
-            handType = "Left hand" if hand.is_left else "Right hand"
+            handType = "Left" if hand.is_left else "Right"
+            # print("  %s, id %d, position: %s" % (handType, hand.id, hand.palm_position))
 
-            print("  %s, id %d, position: %s" % (
-                handType, hand.id, hand.palm_position))
-
-            # Get the hand's normal vector and direction
+            # hand normal & direction vectors
             normal = hand.palm_normal
             direction = hand.direction
 
-            # Calculate the hand's pitch, roll, and yaw angles
+            # hand pitch, roll, and yaw angles
             print("  pitch: %f degrees, roll: %f degrees, yaw: %f degrees" % (
                 direction.pitch * Leap.RAD_TO_DEG,
                 normal.roll * Leap.RAD_TO_DEG,
@@ -80,13 +100,23 @@ class SampleListener(Leap.Listener):
                         bone.prev_joint,
                         bone.next_joint,
                         bone.direction))
+                    
+                    if finger.bone(b-1):
+                        prev_bone = finger.bone(b-1)
+                        rot = orientation.from_vects(bone, prev_bone) # PSEUDO
+
+        self.data[self.c] = self.row
+
+        self.c += 1
+        self.row = np.zeros(shape=[20])
+
 
         if not frame.hands.is_empty:
             print("")
 
 def main():
     # Create a sample listener and controller
-    listener = SampleListener()
+    listener = Listener()
     controller = Leap.Controller()
 
     # Have the sample listener receive events from the controller
@@ -98,6 +128,7 @@ def main():
         sys.stdin.readline()
     except KeyboardInterrupt:
         pass
+        # implement on_exit code here?
     finally:
         # Remove the sample listener when done
         controller.remove_listener(listener)
