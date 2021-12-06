@@ -40,42 +40,81 @@ BLECharacteristic* pE4 = NULL;
 BLECharacteristic* pE5 = NULL;
 BLECharacteristic* pE6 = NULL;
 bool connection = false;
-bool operationMode = 0;
-uint smallLoopDelay = 100;
+bool rngMode = 0;
+uint smallLoopDelay = 10;
 int E1, E2, E3, E4, E5, E6;
 bool wasConnected = false;
-// BLEAddress BDA;
+bool prev = false;
 
 int pin1 = G35;
 int pin2 = G36;
-int pin3 = G26;
-int pin4 = G34;
-int pin5 = G12;
+int pin3 = G25; // 됨
+int pin4 = G26;
+int pin5 = G12; 
 int pin6 = G13;
+// int pin7 = G2
+// int pin8 = G15;
 
 #include <ESP32AnalogRead.h>
-ESP32AnalogRead adc;
-ESP32AnalogRead adc2;
-ESP32AnalogRead adc3;
+// ESP32AnalogRead adc;
+// ESP32AnalogRead adc2;
+// ESP32AnalogRead adc3;
 
 void pinSetup() {
-    pinMode(G35, INPUT);
-    pinMode(G36, INPUT);
-    pinMode(G26, INPUT);
-    pinMode(G34, INPUT);
-    pinMode(G12, INPUT);
-    pinMode(G13, INPUT);
+    // pinMode(G35, INPUT);
+    // pinMode(G36, INPUT);
+    // pinMode(G25, INPUT);
+    // pinMode(G26, INPUT); // 지우기 애매함
+    // pinMode(G34, INPUT);
+    // pinMode(G12, INPUT);
+    // pinMode(G13, INPUT);
+    // pinMode(G0 , INPUT);
+    // pinMode(G2 , INPUT);
+    // pinMode(G15, INPUT);
+    // pinMode(GPIO_NUM_35, INPUT);
+    // pinMode(GPIO_NUM_36, INPUT);
+    // pinMode(GPIO_NUM_25, INPUT);
+    // pinMode(GPIO_NUM_26, INPUT);
+    // pinMode(GPIO_NUM_34, INPUT);
+    // pinMode(GPIO_NUM_12, INPUT);
+    // pinMode(GPIO_NUM_13, INPUT);
+    // pinMode(GPIO_NUM_0, INPUT);
+    // pinMode(GPIO_NUM_2, INPUT);
+    // pinMode(GPIO_NUM_15, INPUT);
 
-    pinMode(GPIO_NUM_35, INPUT);
-    pinMode(GPIO_NUM_36, INPUT);
-    pinMode(GPIO_NUM_26, INPUT);
-    pinMode(GPIO_NUM_34, INPUT);
-    pinMode(GPIO_NUM_12, INPUT);
-    pinMode(GPIO_NUM_13, INPUT);
+    // gpio_pulldown_dis(GPIO_NUM_34);
+    // gpio_pullup_dis(  GPIO_NUM_34);
+    // gpio_pulldown_dis(GPIO_NUM_25);
+    // gpio_pullup_dis(  GPIO_NUM_25);
+    // gpio_pulldown_dis(GPIO_NUM_26);
+    // gpio_pullup_dis(  GPIO_NUM_26);
+    // gpio_pulldown_dis(GPIO_NUM_12);
+    // gpio_pullup_dis(  GPIO_NUM_12);
+    // gpio_pulldown_dis(GPIO_NUM_13);
+    // gpio_pullup_dis(  GPIO_NUM_13);
+    // gpio_pulldown_dis(GPIO_NUM_0);
+    // gpio_pullup_dis(  GPIO_NUM_0);
+    // gpio_pulldown_dis(GPIO_NUM_2);
+    // gpio_pullup_dis(  GPIO_NUM_2);
+    // gpio_pulldown_dis(GPIO_NUM_15);
+    // gpio_pullup_dis(  GPIO_NUM_15);
 
-    gpio_pulldown_dis(GPIO_NUM_34);
-    gpio_pullup_dis(  GPIO_NUM_34);
+    // adcAttachPin(pin1);
+    // adcAttachPin(pin2);
+    // adcAttachPin(pin3);
+    // adcAttachPin(pin4);
+    // adcAttachPin(pin5);
+    // adcAttachPin(pin6);
+
+
+    M5.Lcd.println();
+    M5.Lcd.println("Pins set up.");
+
+    // adc.attach(G34);
+    // adc2.attach(G12);
+    // adc3.attach(G13);
 }
+
 
 class ConnectionOverseer: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -89,19 +128,21 @@ class ConnectionOverseer: public BLEServerCallbacks {
 };
 
 // act as a single call interface for all needed changes in loop behavior
-void applyMode(bool mode) {
-    operationMode = mode;
-    if (!mode) {
-        M5.Lcd.clear(BLACK);
-        M5.Lcd.fillCircle(160, 120, 10, RED);
-    }
-    if (mode) {
+void applyMode(bool rng) {
+    rngMode = rng;
+    if (!rng) {
         M5.Lcd.clear(BLACK);
         M5.Lcd.fillCircle(160, 120, 20, GREEN);
     }
+    if (rng) {
+        M5.Lcd.clear(BLACK);
+        M5.Lcd.fillCircle(160, 120, 24, GREEN);
+        M5.Lcd.fillCircle(160, 120, 20, RED);
+    }
+    delay(1000);
 }
 
-float rng(int maxValue) {
+int rng(int maxValue) {
     return maxValue * random(100) / 100;
 }
 
@@ -110,16 +151,27 @@ void drawBattery() {
     M5.Lcd.drawRect(0, 0, (batt*160)/100, 2, GREEN);
 }
 
-void updateData() {
+void updateAdc() {
     E1 = analogRead(pin1);
     E2 = analogRead(pin2);
-    E3 = analogRead(pin3);
-    // E4 = analogRead(pin4);
-    // E5 = analogRead(pin5);
-    // E6 = analogRead(pin6);
-    E4 = adc.readVoltage();
-    E5 = adc2.readVoltage();
-    E6 = adc3.readVoltage();
+    E3 = analogRead(pin3); analogRead(G26);
+    E4 = analogRead(pin4);
+    E5 = analogRead(pin5);
+    E6 = analogRead(pin6);
+    
+    // ESP32AnalogRead Library - - -
+    // E4 = adc.readVoltage();
+    // E5 = adc2.readVoltage();
+    // E6 = adc3.readVoltage();
+}
+
+void updateRng() {
+    E1 = rng(4096);
+    E2 = rng(4096);
+    E3 = rng(4096);
+    E4 = rng(4096);
+    E5 = rng(4096);
+    E6 = rng(4096);
 }
 
 void oldVisualizeData() {
@@ -128,7 +180,7 @@ void oldVisualizeData() {
 
 int hE1, hE2, hE3, hE4, hE5, hE6;
 
-void visualizeData() {
+void visualizeData(String mode) {
     hE1 = (E1*200)/4096;
     hE2 = (E2*200)/4096;
     hE3 = (E3*200)/4096;
@@ -148,28 +200,42 @@ void visualizeData() {
     M5.Lcd.fillRect(40 , 220-hE1, 30, hE1, GREEN);
     M5.Lcd.fillRect(80 , 220-hE2, 30, hE2, GREEN);
     M5.Lcd.fillRect(120, 220-hE3, 30, hE3, GREEN);
-    M5.Lcd.fillRect(120, 220-hE4, 30, hE4, GREEN);
-    M5.Lcd.fillRect(120, 220-hE5, 30, hE5, GREEN);
-    M5.Lcd.fillRect(120, 220-hE6, 30, hE6, GREEN);
+    M5.Lcd.fillRect(160, 220-hE4, 30, hE4, GREEN);
+    M5.Lcd.fillRect(200, 220-hE5, 30, hE5, GREEN);
+    M5.Lcd.fillRect(240, 220-hE6, 30, hE6, GREEN);
+
+    M5.Lcd.drawString(mode, 5, 5);
+}
+
+void pushData() {
+    pE1->setValue(E1);  pE1->notify();
+    pE2->setValue(E2);  pE2->notify();
+    pE3->setValue(E3);  pE3->notify();
+    pE4->setValue(E4);  pE4->notify();
+    pE5->setValue(E5);  pE5->notify();
+    pE6->setValue(E6);  pE6->notify();
 }
 
 void setup() {
-    pinSetup();
+    // pinSetup(); 
 
+    // M5
     M5.begin(true, false, false, false);
     M5.Power.begin();
 
-    adc.attach(G34);
-    adc2.attach(G12);
-    adc3.attach(G13);
 
+    // ADC
+    delay(1000);
+    pinSetup(); // so it doesn't intefere w/ boot
+
+
+    // bluetooth
     BLEDevice::init("M5Fire");
 
     pServer = BLEDevice::createServer();
     pServer->setCallbacks(new ConnectionOverseer());
 
     BLEService *pService = pServer->createService(BLEUUID(SERVICE_UUID), 30, 0);
-    // BLEService *pService = pServer->createService(SERVICE_UUID;
 
     pE1 = pService->createCharacteristic(
                         CHAR_E1_UUID,
@@ -230,82 +296,67 @@ void setup() {
     // pAdvertising->setMinPreferred(0x0);  // 아이폰때문에 넣는거랬나?
     BLEDevice::startAdvertising();
 
+
+    // homescreen
+    M5.Lcd.setBrightness(20);
+    drawBattery();
+    
     M5.Lcd.fillCircle(160, 120, 5, BLUE);
+
     BLEAddress BDA = BLEDevice::getAddress();
     const char *sBDA = BDA.toString().c_str();
     M5.Lcd.drawString(sBDA, 5, 5);
-
-    drawBattery();
-    M5.Lcd.setBrightness(20);
 }
 
 void loop() {
-    // before first connection
-    if (!connection && !wasConnected) {
-        // M5.Rtc.GetBm8563Time();
-        // M5.Lcd.setCursor(0, 30, 2);
-        // M5.Lcd.printf("%02d : %02d : %02d\n", M5.Rtc.Hour, M5.Rtc.Minute, M5.Rtc.Second);
-        delay(1000);
-    }
 
-    // initiating connection
-    if (connection && !wasConnected) {
+    // connection
+    if (!connection && !wasConnected) { // before first connection
+        if (prev) {
+            updateAdc();
+            visualizeData("ADC Mode");
+            pushData();
+            delay(smallLoopDelay);
+        }
+        else { delay(1000); }
+    }
+    if (connection && !wasConnected) { // initiating connection
         wasConnected = true;
         delay(1000);
-        applyMode(true);
+        applyMode(false);
     }
-
-    // during connection
-    if (connection) {
-        if (!operationMode) {
-            // 이름 말고, 0999 1999 2999 3999 이렇게 하면 PC쪽에서 더 편할듯
-            updateData();
-            pE1->setValue("E1");  pE1->notify();
-            pE2->setValue("E2");  pE2->notify();
-            pE3->setValue("E3");  pE3->notify();
-            pE4->setValue("E4");  pE4->notify();
-            pE5->setValue("E5");  pE5->notify();
-            pE6->setValue("E6");  pE6->notify();
-            delay(1);
+    if (connection) { // during connection
+        if (!rngMode) {
+            updateAdc();
+            visualizeData("ADC Mode");
+            pushData();
+            delay(smallLoopDelay);
         }
-        else if (operationMode) {
-            updateData();
-            visualizeData();
-            pE1->setValue(E1);    pE1->notify();
-            pE2->setValue(E2);    pE2->notify();
-            pE3->setValue(E3);    pE3->notify();
-            pE4->setValue(E4);    pE4->notify();
-            pE5->setValue(E5);    pE5->notify();
-            pE6->setValue(E6);    pE6->notify();
+        else if (rngMode) {
+            updateRng();
+            visualizeData("RNG Mode");
+            pushData();
             delay(smallLoopDelay);
         }
 
-        M5.update();
-        if(M5.BtnA.wasPressed()) {
-          applyMode(!operationMode);
-          delay(1500);
-        }
-        // 근데 아두이노는 더블레지스터 오류를 어떻게 잡을까? 버튼 누른 상태로 루프 두면 돌면 그냥 되돌아가는거 아닌가? -> 딜레이, 아마?
     }
+    
+    M5.update();
+    if(M5.BtnA.wasPressed()) { applyMode(!rngMode); }
+    if(M5.BtnB.wasPressed()) { prev = !prev; delay(1000); }
 
     // initiating disconnection
     if (!connection && wasConnected) {
         wasConnected = false;
+        
         M5.Lcd.clear(BLACK);
-        drawBattery();
         M5.Lcd.fillCircle(160, 120, 5, BLUE);
+        drawBattery();
+
         delay(500); // give the bluetooth stack the chance to get things ready
         pServer->startAdvertising(); // restart advertising
 
     }
 }
 
-// 추가할것:
-// 원 위치 조정 (해상도 기반, 계산 ㄱ)
-// BLE-IMU 특징 최적화
-// 전력관리: 
-// 배터리 잔량 표시
-// LCD 밝기 -> 7
-// Wifi 종료
-// 마이크로폰 종료
-// 작업 최적화 (주파수 내려도 좋을듯)
+// PERIPHERALS mapping spreadsheet: may need to re-find one for M5Fire specifically!
