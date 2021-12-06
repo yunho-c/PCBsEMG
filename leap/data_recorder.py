@@ -11,9 +11,14 @@
 import sys, os, inspect
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(inspect.getfile(inspect.currentframe())), 'lib/x64')))
 
-import _thread, time
+# bleak
+import asyncio
+from bleak import BleakClient
+
+# leap
 import Leap
 
+# data
 import numpy as np
 import pandas as pd
 import ahrs
@@ -23,20 +28,25 @@ from scipy.spatial.transform import Rotation as R
 
 import time
 
+FPS_ROUGH = 60
+
 class Util:
-    FPS_ROUGH = 1 # 60
+    FINGERS = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'] # ordered correctly (nice)
+    BONES = ['Metacarpal', 'Proximal', 'Intermediate', 'Distal'] # ordered correctly (nice)
+    AXES = ['X', 'Y', 'Z']
+    def __init__(self): self.COLS = [f+'_'+b+'_'+axis for f in self.FINGERS for b in self.BONES for axis in self.AXES] # hacky asf
 
     # bluetooth
     DURATION = 1000
-    CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a1"
-    CHARACTERISTIC_UUID2 = "beb5483e-36e1-4688-b7f5-ea07361b26a2"
-    CHARACTERISTIC_UUID3 = "beb5483e-36e1-4688-b7f5-ea07361b26a3"
-    CHARACTERISTIC_UUID4 = "beb5483e-36e1-4688-b7f5-ea07361b26a4"
-    CHARACTERISTIC_UUID5 = "63bac001-bee5-4148-b8c7-220305bada25"
-    CHARACTERISTIC_UUID6 = "b2465de1-6a70-4ca8-acf6-cd1cd0fa5d46"
+    CHAR_UUID1 = "beb5483e-36e1-4688-b7f5-ea07361b26a1"
+    CHAR_UUID2 = "beb5483e-36e1-4688-b7f5-ea07361b26a2"
+    CHAR_UUID3 = "beb5483e-36e1-4688-b7f5-ea07361b26a3"
+    CHAR_UUID4 = "beb5483e-36e1-4688-b7f5-ea07361b26a4"
+    CHAR_UUID5 = "63bac001-bee5-4148-b8c7-220305bada25"
+    CHAR_UUID6 = "b2465de1-6a70-4ca8-acf6-cd1cd0fa5d46"
     ADDRESS = "98:f4:ab:6c:d9:76"
 
-    def mapper(handle): # need to configure!
+    def mapper(self, handle): # need to configure!
         # print(handle)
         if handle == 41:
             return 1
@@ -53,10 +63,6 @@ class Util:
         # jonna inefficient
     
     # leap
-    FINGERS = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'] # ordered correctly (nice)
-    BONES = ['Metacarpal', 'Proximal', 'Intermediate', 'Distal'] # ordered correctly (nice)
-    AXES = ['X', 'Y', 'Z']
-    COLS = [f+'_'+b+'_'+axis for f in FINGERS for b in BONES for axis in AXES]
 
     # https://stackoverflow.com/a/69911892
     def get_rotation_matrix(vec2, vec1=np.array([1, 0, 0])):
@@ -85,12 +91,17 @@ class Util:
         assert np.allclose(vec1_rot / np.linalg.norm(vec1_rot), vec2 / np.linalg.norm(vec2))
 utils = Util()
 
-dirc = np.zeros(shape=(10000, 60)) # direction vectors
-xngl = np.zeros(shape=(10000, 60)) # relative axang
-dirc_df = None
-xngl_df = None
+class Btupdater:
+    def __init__(self):
+        self.data = [None] * 6
 
-class Updater(Leap.Listener):
+    def noti_handler(self, sender, data):
+        """Simple notification handler which prints the data received."""
+        dat = int.from_bytes(data, byteorder='little', signed=True)
+        # print("{0}: {1}".format(sender, dat))
+        self.data[utils.mapper(sender)-1] = dat
+
+class Leapupdater(Leap.Listener):
 
     def on_init(self, controller):
         self.is_empty = None
@@ -99,6 +110,7 @@ class Updater(Leap.Listener):
         print("Initialized")
 
     def on_connect(self, controller):
+        print()
         print("Connected")
 
     def on_disconnect(self, controller):
@@ -153,55 +165,79 @@ class Updater(Leap.Listener):
                     self.row[12*f+3*b+2] = round(bone.direction[2], 3)
 
 
-
 def process_directions(row): # 이런 씨발 이거 까먹고 있었다
     return row.copy()
     # metacarpal은 arm bone 기반으로. relative한게 중요할듯. 뭐... 무튼
 
 
-def main(dirc, xngl):
-    num = input('Enter data recording #')
+async def main():
+    async with BleakClient(utils.ADDRESS) as client:
+        c = 0
 
-    c = 0
-    # Create a sample listener and controller
-    listener = Updater()
-    controller = Leap.Controller()
+        dirc = np.zeros(shape=(10000, 60)) # direction vectors
+        xngl = np.zeros(shape=(10000, 60)) # relative axang
+        semg = np.zeros(shape=(10000, 6))
+        dirc_df = None
+        xngl_df = None
 
-    # Have the sample listener receive events from the controller
-    controller.add_listener(listener)
+        print(f"Bluetooth onnected: {client.is_connected}")
 
-    # loop
-    while not listener.end:
-        # metadata
-        c += 1
+        btlistener = Btupdater()
+        await client.start_notify(utils.CHAR_UUID1, btlistener.noti_handler)
+        await client.start_notify(utils.CHAR_UUID2, btlistener.noti_handler)
+        await client.start_notify(utils.CHAR_UUID3, btlistener.noti_handler)
+        await client.start_notify(utils.CHAR_UUID4, btlistener.noti_handler)
+        await client.start_notify(utils.CHAR_UUID5, btlistener.noti_handler)
+        await client.start_notify(utils.CHAR_UUID6, btlistener.noti_handler)
 
-        # loop control
-        # i = input('Enter to exit')
-        # if i is not None: break
-        
+        leaplistener = Leapupdater()
+        controller = Leap.Controller()
+        controller.add_listener(leaplistener)
 
-        # main
-        if not listener.is_empty:
-            print(listener.row)
-            dirc[c] = listener.row
-            xngl[c] = process_directions(listener.row)
-        else: 
-            print("No hands in frame!")
-        
-        # flow control (add/remove more)
-        time.sleep(1/utils.FPS_ROUGH)
+        time.sleep(1)
+        num = input('Enter data recording #') # async와 사용시 blocking 안되는지도. 뭐 ㄲㅂ지만 상관없.
 
-    # save
-    dirc = dirc[:c]
-    xngl = xngl[:c]
-    dirc_df = pd.DataFrame(dirc, columns=utils.COLS)
-    dirc_df.to_csv('./data/dirc_'+num+'.csv', index=False)
-    xngl_df = pd.DataFrame(xngl, columns=utils.COLS)
-    xngl_df.to_csv('./data/xngl_'+num+'.csv', index=False)
+        # loop
+        while not leaplistener.end:
+            # metadata
+            c += 1
 
-    # exit
-    controller.remove_listener(listener)
+            # main
+            if not leaplistener.is_empty:
+                print('Frame '+str(c)+':')
+                print(btlistener.data)
+                print(leaplistener.row)
+                dirc[c] = leaplistener.row
+                xngl[c] = process_directions(leaplistener.row)
+                semg[c] = btlistener.data
+            else: 
+                # print("No hands in frame!")
+                pass
+            
+            # flow control (add/remove more)
+            await asyncio.sleep(1/FPS_ROUGH)
+
+        # save
+        dirc = dirc[:c]
+        xngl = xngl[:c]
+        semg = semg[:c]
+        dirc_df = pd.DataFrame(dirc, columns=utils.COLS)
+        dirc_df.to_csv('./data/'+num+'_dirc.csv', index=False)
+        xngl_df = pd.DataFrame(xngl, columns=utils.COLS)
+        xngl_df.to_csv('./data/'+num+'_xngl.csv', index=False)
+        semg_df = pd.DataFrame(semg, columns=['E1', 'E2', 'E3', 'E4', 'E5', 'E6'])
+        semg_df.to_csv('./data/'+num+'_semg.csv', index=False)
+
+        # exit
+        controller.remove_listener(leaplistener)
+
+        await client.stop_notify(utils.CHAR_UUID1)
+        await client.stop_notify(utils.CHAR_UUID2)
+        await client.stop_notify(utils.CHAR_UUID3)
+        await client.stop_notify(utils.CHAR_UUID4)
+        await client.stop_notify(utils.CHAR_UUID5)
+        await client.stop_notify(utils.CHAR_UUID6)
 
 
 if __name__ == "__main__":
-    main(dirc, xngl)
+    asyncio.run(main())
