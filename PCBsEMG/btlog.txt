@@ -1,0 +1,17 @@
+41: bytearray(b'\x83\xc0\xca>')
+41: bytearray(b'\xb2\x9d\x8f?')
+41: bytearray(b'\xaa\xf1\x02@')
+Traceback (most recent call last):
+  File "g:\My Drive\study\I2P\PCBsEMG\bt.py", line 45, in <module>
+    asyncio.run(
+  File "C:\Users\hocbu\AppData\Local\Programs\Python\Python310\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "C:\Users\hocbu\AppData\Local\Programs\Python\Python310\lib\asyncio\base_events.py", line 641, in run_until_complete 
+    return future.result()
+  File "g:\My Drive\study\I2P\PCBsEMG\bt.py", line 41, in main
+    await client.stop_notify(char_uuid)
+  File "C:\Users\hocbu\AppData\Local\Programs\Python\Python310\lib\site-packages\bleak\backends\winrt\client.py", line 729, in stop_notify
+    _ensure_success(
+  File "C:\Users\hocbu\AppData\Local\Programs\Python\Python310\lib\site-packages\bleak\backends\winrt\client.py", line 101, in _ensure_success
+    raise BleakError(f"{fail_msg}: Unreachable")
+bleak.exc.BleakError: Could not stop notify on 0029: Unreachable
